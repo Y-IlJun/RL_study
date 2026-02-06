@@ -30,26 +30,37 @@ class DQN(tf.keras.Model):
 # 카트폴 예제에서의 DQN 에이전트
 class DQNAgent:
     def __init__(self, state_size, action_size):
-        self.render = True
+        #화면 띄우면서 학습->True
+        #화면 띄우지 않고 학습->False
+        self.render = True 
 
         # 상태와 행동의 크기 정의
         self.state_size = state_size
         self.action_size = action_size
 
-        # DQN 하이퍼파라미터
+        # DQN 하이퍼파라미터(학습을 시작하기 전 사람이 정해주는 설정값)
         self.discount_factor = 0.99
+
+        #옵티마이저 학습률
         self.learning_rate = 0.001
+
         self.epsilon = 1.0
         self.epsilon_decay = 0.999
         self.epsilon_min = 0.01
+
+        #리플레이 메모리에서 한번에 학습할 샘플 수
         self.batch_size = 64
+
+        #메모리가 이 이상 쌓여야 학습 시작
         self.train_start = 1000
 
-        # 리플레이 메모리, 최대 크기 2000
+        # 리플레이 메모리, 최대 크기 2000(2000개 넘어갈 시 FIFO로 삭제)
         self.memory = deque(maxlen=2000)
 
-        # 모델과 타깃 모델 생성
+        #인공신경망
         self.model = DQN(action_size)
+
+        #타깃신경망
         self.target_model = DQN(action_size)
         self.optimizer = Adam(lr=self.learning_rate)
 
@@ -58,11 +69,14 @@ class DQNAgent:
 
     # 타깃 모델을 모델의 가중치로 업데이트
     def update_target_model(self):
+        #온라인 신경망 가중치를 타깃신경망에 복사
         self.target_model.set_weights(self.model.get_weights())
 
     # 입실론 탐욕 정책으로 행동 선택
     def get_action(self, state):
+        #0.0<=x<1.0
         if np.random.rand() <= self.epsilon:
+            #0...(action_size-1)중 하나 리턴
             return random.randrange(self.action_size)
         else:
             q_value = self.model(state)
@@ -70,7 +84,7 @@ class DQNAgent:
 
     # 샘플 <s, a, r, s'>을 리플레이 메모리에 저장
     def append_sample(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
+        self.memory.append((state, action, reward, next_state, done)) #이렇게가 한 타임스탭임
 
     # 리플레이 메모리에서 무작위로 추출한 배치로 모델 학습
     def train_model(self):
@@ -78,8 +92,10 @@ class DQNAgent:
             self.epsilon *= self.epsilon_decay
 
         # 메모리에서 배치 크기만큼 무작위로 샘플 추출
+        #mini_batch는 데이터 버스로 생각하면 됨
         mini_batch = random.sample(self.memory, self.batch_size)
 
+        #state=[카트위치,카트속도,막대각도,막대각속도]
         states = np.array([sample[0][0] for sample in mini_batch])
         actions = np.array([sample[1] for sample in mini_batch])
         rewards = np.array([sample[2] for sample in mini_batch])
@@ -87,20 +103,20 @@ class DQNAgent:
         dones = np.array([sample[4] for sample in mini_batch])
 
         # 학습 파라메터
-        model_params = self.model.trainable_variables
+        model_params = self.model.trainable_variables #신경망이 학습하면서 바꿀 수 있는 파라미터
         with tf.GradientTape() as tape:
             # 현재 상태에 대한 모델의 큐함수
-            predicts = self.model(states)
-            one_hot_action = tf.one_hot(actions, self.action_size)
-            predicts = tf.reduce_sum(one_hot_action * predicts, axis=1)
+            predicts = self.model(states) #모델안에 있는 가중치로 그 상태에 대한 Q값을 계산
+            one_hot_action = tf.one_hot(actions, self.action_size) #원 핫 인코딩
+            predicts = tf.reduce_sum(one_hot_action * predicts, axis=1) #차원을 줄이고 더함
 
             # 다음 상태에 대한 타깃 모델의 큐함수
-            target_predicts = self.target_model(next_states)
-            target_predicts = tf.stop_gradient(target_predicts)
+            target_predicts = self.target_model(next_states) #next_state에 대한 Q값 예측
+            target_predicts = tf.stop_gradient(target_predicts) #stop_gradient는 미분하지말라는 뜻
 
             # 벨만 최적 방정식을 이용한 업데이트 타깃
-            max_q = np.amax(target_predicts, axis=-1)
-            targets = rewards + (1 - dones) * self.discount_factor * max_q
+            max_q = np.amax(target_predicts, axis=-1) #amax는 값을 리턴//argmax는 인덱스 리턴
+            targets = rewards + (1 - dones) * self.discount_factor * max_q #각 행끼리 계산됨
             loss = tf.reduce_mean(tf.square(targets - predicts))
 
         # 오류함수를 줄이는 방향으로 모델 업데이트
