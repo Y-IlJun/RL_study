@@ -185,7 +185,7 @@ if __name__ == "__main__":
                 pylab.ylabel("average score")
                 pylab.savefig("./save_graph/graph.png")
 
-                # 이동 평균이 400 이상일 때 종료
+                # 이동 평균이 400 이상일 때 종료(#이동평균:최근 n개의 점수 평균)
                 if score_avg > 400:
                     agent.model.save_weights("./save_model/model", save_format="tf")
                     sys.exit()
