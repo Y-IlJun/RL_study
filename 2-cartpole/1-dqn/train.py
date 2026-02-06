@@ -17,8 +17,9 @@ class DQN(tf.keras.Model):
         super(DQN, self).__init__()
         self.fc1 = Dense(24, activation='relu')
         self.fc2 = Dense(24, activation='relu')
-        self.fc_out = Dense(action_size,
-                            kernel_initializer=RandomUniform(-1e-3, 1e-3))
+
+        #마지막 출력층만 작은 값 → 학습 안정 + 초기 정책이 거의 균등한 상태(더 복잡한 환경이나 큰 Q값 범위가 있는 경우에는 출력층 초기화 차이가 더 크게 나타남)
+        self.fc_out = Dense(action_size,kernel_initializer=RandomUniform(-1e-3,1e-3))
 
     def call(self, x):
         x = self.fc1(x)
@@ -32,7 +33,7 @@ class DQNAgent:
     def __init__(self, state_size, action_size):
         #화면 띄우면서 학습->True
         #화면 띄우지 않고 학습->False
-        self.render = True 
+        self.render = True
 
         # 상태와 행동의 크기 정의
         self.state_size = state_size
@@ -55,7 +56,7 @@ class DQNAgent:
         self.train_start = 1000
 
         # 리플레이 메모리, 최대 크기 2000(2000개 넘어갈 시 FIFO로 삭제)
-        self.memory = deque(maxlen=2000)
+        self.memory = deque(maxlen=2000)#deque를 통해 메모리 생성
 
         #인공신경망
         self.model = DQN(action_size)
@@ -65,7 +66,7 @@ class DQNAgent:
         self.optimizer = Adam(lr=self.learning_rate)
 
         # 타깃 모델 초기화
-        self.update_target_model()
+        self.update_target_model()#DQN 생성시 초기에 무작위 가중치라 타깃모델을 초기화해줌
 
     # 타깃 모델을 모델의 가중치로 업데이트
     def update_target_model(self):
@@ -93,7 +94,7 @@ class DQNAgent:
 
         # 메모리에서 배치 크기만큼 무작위로 샘플 추출
         #mini_batch는 데이터 버스로 생각하면 됨
-        mini_batch = random.sample(self.memory, self.batch_size)
+        mini_batch = random.sample(self.memory, self.batch_size)#memory에서 batch_size 만큼 랜덤으로 뽑음
 
         #state=[카트위치,카트속도,막대각도,막대각속도]
         states = np.array([sample[0][0] for sample in mini_batch])
@@ -112,15 +113,17 @@ class DQNAgent:
 
             # 다음 상태에 대한 타깃 모델의 큐함수
             target_predicts = self.target_model(next_states) #next_state에 대한 Q값 예측
-            target_predicts = tf.stop_gradient(target_predicts) #stop_gradient는 미분하지말라는 뜻
+
+            #stop_gradient는 미분하지말라는 뜻->Tape로 계산 과정 기록중 이 값또한 미분해서 loss에 반영될까봐 막음
+            target_predicts = tf.stop_gradient(target_predicts) 
 
             # 벨만 최적 방정식을 이용한 업데이트 타깃
             max_q = np.amax(target_predicts, axis=-1) #amax는 값을 리턴//argmax는 인덱스 리턴
             targets = rewards + (1 - dones) * self.discount_factor * max_q #각 행끼리 계산됨
-            loss = tf.reduce_mean(tf.square(targets - predicts))
+            loss = tf.reduce_mean(tf.square(targets - predicts))#평균을 내면 배치 크기와 상관없이 손실 값이 일정한 스케일이 됨
 
         # 오류함수를 줄이는 방향으로 모델 업데이트
-        grads = tape.gradient(loss, model_params)
+        grads = tape.gradient(loss, model_params) #역전파 시작 
         self.optimizer.apply_gradients(zip(grads, model_params))
 
 
